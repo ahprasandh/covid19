@@ -1,6 +1,6 @@
 <template>
   <div v-if="!inner">
-    <div class="map" id="map" @mouseover.stop="">
+    <div class="map" id="map" @mouseover.stop>
       <span class="message" v-text="mapMessage" />
       <svg id="chloropath" style="z-index: 1;" @mouseover.stop="()=>{}">
         <defs>
@@ -690,12 +690,16 @@ export default {
           this.data = JSON.parse(JSON.stringify(this.stats.objects[key]));
         } else {
           this.data = {
-            region:
+            name:
               d.properties.name || d.properties.district || d.properties.state,
             active: null,
             confirmed: null,
-            deltaactive: null,
-            deltaconfirmed: null
+            deaths: null,
+            delta: {
+              active: null,
+              confirmed: null,
+              deaths: null
+            }
           };
         }
       } else {
@@ -716,7 +720,7 @@ export default {
           this.data = JSON.parse(JSON.stringify(obj));
         }
       }
-    },
+    }
   }
 };
 </script>

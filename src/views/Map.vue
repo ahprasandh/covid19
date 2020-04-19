@@ -174,6 +174,9 @@
   </div>
   <div v-else>
     <svg id="innerchloropath" style="z-index: 1;" />
+    <div class="noMapMessageWrapper">
+      <span class="noMapMessage" v-if="error" v-text="mapMessage" />
+    </div>
   </div>
 </template>
 <style>
@@ -248,9 +251,6 @@
   text-transform: uppercase;
   background: #1313132b;
 }
-.stats .holder.active {
-  /* background: #ca656591; */
-}
 .stats .holder.active,
 .stats .table .delta.active {
   color: #ca6565;
@@ -259,23 +259,13 @@
 .stats .holder .delta.invert {
   color: #83e46c;
 }
-.stats .holder.confirmed {
-  /* background: #daa423;
-  color: #000; */
-}
 .stats .holder.confirmed,
 .stats .table .delta.confirmed {
   color: #5862e4;
 }
-.stats .holder.recovered {
-  /* background: #83e46c8f; */
-}
 .stats .holder.recovered,
 .stats .table .delta.recovered {
   color: #83e46c;
-}
-.stats .holder.death {
-  /* background: #ffffff26; */
 }
 .stats .holder.death,
 .stats .table .delta.deaths {
@@ -364,6 +354,22 @@
   top: 20px;
   left: 10px;
 }
+.noMapMessageWrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 0;
+  height: 100%;
+  left: 0;
+  justify-content: center;
+}
+.noMapMessage {
+  color: #979797;
+  font-size: 25px;
+  align-self: center;
+  text-align: center;
+}
 </style>
 <script>
 import { mapState, mapGetter, mapActions } from "vuex";
@@ -409,7 +415,8 @@ export default {
         asc: false
       },
       maps: {},
-      mapMessage: "Click to view individual Stats"
+      mapMessage: "Click to view individual Stats",
+      error: false
     };
   },
   mounted() {
@@ -451,15 +458,19 @@ export default {
       } else {
         this.geography = this.propGeography;
         this.geographyType = this.propGeographyType;
-        if (this.propGeographyType == "country") {
-          return state.india;
-        } else if (this.propGeographyType == "state") {
-          this.geography = this.propGeography + "_district";
-          return state.india.objects[this.propGeography];
-        } else {
-          return state.india.objects[this.$route.params.state].objects[
-            this.propGeography
-          ];
+        if (this.propGeographyType) {
+          if (this.propGeographyType == "country") {
+            return state.india;
+          } else if (this.propGeographyType == "state") {
+            this.geography = this.propGeography + "_district";
+            return state.india.objects[this.propGeography];
+          } else {
+            return state.india.objects[this.$route.params.state].objects[
+              this.propGeography
+            ];
+          }
+        }else{
+          return {objects:{}}
         }
       }
     },
@@ -552,19 +563,23 @@ export default {
       }
       var mapUrl = process.env.BASE_URL + "maps" + this.getMapName() + ".json";
       var func = this.storeLoadedMap;
+      this.error = false;
       if (this.maps[mapUrl]) {
-        this.plotMap(this.maps[mapUrl]);
+          this.plotMap(this.maps[mapUrl]);
       } else {
         d3.json(process.env.BASE_URL + "maps" + this.getMapName() + ".json")
           .then(geo => {
             func(geo, mapUrl);
           })
           .catch(err => {
-            console.log(err);
-            //   console.log(err + "-" + this.inner + "-" + this.getMapName());
             console.log("NO MAP " + this.getMapName());
+            this.noMap();
           });
       }
+    },
+    noMap() {
+      this.error = true;
+      this.mapMessage = "No Map Available. Contact author.";
     },
     storeLoadedMap(geo, mapUrl) {
       var topology = topojson.feature(geo, geo.objects[this.geography]);
@@ -604,10 +619,10 @@ export default {
         })
         .attr("d", path);
       this.loading = false;
+      this.error=false;
     },
     getKey(d) {
       var key = null;
-      //   console.log(d.properties);
       if (this.geographyType === "country") {
         key = d.properties.state.lowerize();
       } else if (this.geographyType === "state") {
@@ -626,6 +641,9 @@ export default {
       return ratio;
     },
     calcFill(d) {
+      if (!this.stats.objects) {
+        this.stats.objects = {};
+      }
       return this.stats.objects[this.getKey(d)] ? "#ff0000" : "url(#p1)";
     },
     calcFillOnHover(d) {

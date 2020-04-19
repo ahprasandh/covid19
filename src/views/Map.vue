@@ -1,6 +1,7 @@
 <template>
   <div v-if="!inner">
-    <div class="map" id="map" @mouseover.stop="mapHover($event)">
+    <div class="map" id="map" @mouseover.stop="">
+      <span class="message" v-text="mapMessage" />
       <svg id="chloropath" style="z-index: 1;" @mouseover.stop="()=>{}">
         <defs>
           <pattern id="p1" patternUnits="userSpaceOnUse" width="6" height="6">
@@ -15,38 +16,68 @@
         </defs>
       </svg>
     </div>
-    <div v-if="this.svg" class="stats" @mouseover="current.target=null;setData()">
+    <div v-if="!loading" class="stats" @mouseover="current.target=null;setData()">
       <span
         class="source"
         v-text="$route.params.city==='chennai'?'Data Source - https://twitter.com/chennaicorp':'Data Source - https://api.covid19india.org'"
       />
+      <div class="region">
+        <span v-text="data.name"></span>
+      </div>
       <div class="wrapper">
-        <div class="holder region">
-          <!-- <span class="title">Region</span> -->
-          <span v-text="data.region"></span>
-        </div>
         <div class="holder active">
           <span class="title">Active</span>
-          <span class="delta" v-text="data.deltaactive || 0"></span>
+          <span v-if="data.daily">
+            <line-chart
+              v-if="data.daily"
+              class="chart"
+              id="active"
+              :data="data.daily.active"
+              :cumulate="false"
+              :color="data.delta.active<0 || data.active < data.confirmed/2 ?'#83e46c':'#ca6565'"
+            />
+          </span>
+          <span :class="{invert:data.delta.active<0}" class="delta" v-text="data.delta.active || 0"></span>
           <span v-text="data.active || 'N/A'"></span>
         </div>
         <div class="holder recovered">
           <span class="title">Recovered</span>
-          <span class="delta" v-text="data.deltarecovered || 0"></span>
+          <line-chart
+            id="recovered"
+            v-if="data.daily"
+            class="chart"
+            :data="data.daily.recovered"
+            color="#83e46c"
+          />
+          <span class="delta" v-text="data.delta.recovered || 0"></span>
           <span v-text="data.recovered || 'N/A'"></span>
         </div>
         <div class="holder death">
           <span class="title">Deceased</span>
-          <span class="delta" v-text="data.deltadeaths || 0"></span>
+          <line-chart
+            id="death"
+            v-if="data.daily"
+            class="chart"
+            :data="data.daily.deaths"
+            color="#979797"
+          />
+          <span class="delta" v-text="data.delta.deaths || 0"></span>
           <span v-text="data.deaths || 'N/A'"></span>
         </div>
         <div class="holder confirmed">
           <span class="title">Confirmed</span>
-          <!-- <span class="delta" v-text="data.deltaconfirmed || 0"></span> -->
+          <line-chart
+            v-if="data.daily"
+            class="chart"
+            :data="data.daily.confirmed"
+            :cumulate="false"
+            color="#5862e4"
+          />
+          <span class="delta" v-text="data.delta.confirmed || 0"></span>
           <span v-text="data.confirmed || 'N/A'"></span>
         </div>
       </div>
-      <div v-if="current.target==null" class="table">
+      <div v-show="current.target==null" class="table">
         <table align="center">
           <thead class="row">
             <th
@@ -83,31 +114,49 @@
             :class="{'total':data.name && data.name.toLowerCase()==='total'}"
           >
             <td>
+              <span v-if="data.daily && data.daily.active">
+                <line-chart class="chart" :data="data.daily.active" :cumulate="false" />
+              </span>
               <span class="data" v-text="data.name"></span>
             </td>
             <td>
+              <span
+                class="delta active"
+                :class="{invert:data.delta.active<0}"
+                v-if="data.delta && data.delta.active && data.delta.active != 0"
+                v-text="data.delta.active"
+              ></span>
               <span class="data" v-text="data.active"></span>
-              <span class="delta active" v-if="data.deltaactive > 0" v-text="data.deltaactive"></span>
             </td>
             <td>
-              <span class="data" v-text="data.recovered"></span>
               <span
                 class="delta recovered"
-                v-if="data.deltarecovered > 0"
-                v-text="data.deltarecovered"
+                v-if="data.delta && data.delta.recovered > 0"
+                v-text="data.delta.recovered"
+              ></span>
+              <span
+                class="data"
+                v-text="(data.recovered || data.recovered===0)?data.recovered:'N/A'"
               ></span>
             </td>
             <td>
-              <span class="data" v-text="data.deaths"></span>
-              <span class="delta deaths" v-if="data.deltadeaths > 0" v-text="data.deltadeaths"></span>
+              <span
+                class="delta deaths"
+                v-if="data.delta && data.delta.deaths > 0"
+                v-text="data.delta.deaths"
+              ></span>
+              <span class="data" v-text="(data.deaths || data.deaths===0)?data.deaths:'N/A'"></span>
             </td>
             <td>
-              <span class="data" v-text="data.confirmed"></span>
-              <!-- <span
+              <span v-if="data.daily && data.daily.confirmed">
+                <line-chart class="chart" :data="data.daily.confirmed" :cumulate="false" />
+              </span>
+              <span
                 class="delta confirmed"
-                v-if="data.deltaconfirmed > 0"
-                v-text="data.deltaconfirmed"
-              ></span>-->
+                v-if="data.delta && data.delta.confirmed > 0"
+                v-text="data.delta.confirmed"
+              ></span>
+              <span class="data" v-text="data.confirmed"></span>
             </td>
           </tr>
         </table>
@@ -118,10 +167,10 @@
         :propGeography="current.geography"
         :propGeographyType="current.geographyType"
         :mapPath="current.mapPath"
-        v-else
+        v-if="current.target!==null"
       />
     </div>
-    <div v-if="!this.svg" class="loading">Loading...</div>
+    <div v-if="loading" class="loading">Loading...</div>
   </div>
   <div v-else>
     <svg id="innerchloropath" style="z-index: 1;" />
@@ -153,17 +202,19 @@
   background: #00000021;
   border-radius: 5px;
   padding: 5px;
-  width: 75px;
-  height: 60px;
+  width: 25%;
   overflow: hidden;
+  font-weight: bold;
 }
 .stats .source {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: 30px;
+  right: 0;
   white-space: nowrap;
   color: #979797;
-  padding: 0 7px;
+  width: 100%;
+  text-align: right;
+  font-size: 12px;
 }
 .stats .wrapper {
   position: relative;
@@ -184,37 +235,49 @@
   font-size: 20px;
   line-height: 15px;
 }
-
-.stats .holder.region {
-  width: 150px;
-  justify-content: center;
+.stats .table .delta.active.invert::before,
+.stats .holder .delta.invert::before {
+  content: "↓";
+}
+.stats .region {
+  position: relative;
+  font-size: 20px;
+  justify-content: left;
+  text-align: left;
+  padding: 0 7px;
+  text-transform: uppercase;
+  background: #1313132b;
 }
 .stats .holder.active {
-  background: #ca656591;
+  /* background: #ca656591; */
 }
-.stats .holder.active .delta::before,
+.stats .holder.active,
 .stats .table .delta.active {
   color: #ca6565;
 }
-.stats .holder.confirmed {
-  background: #daa423;
-  color: #000;
+.stats .table .delta.active.invert,
+.stats .holder .delta.invert {
+  color: #83e46c;
 }
-.stats .holder.confirmed .delta::before,
+.stats .holder.confirmed {
+  /* background: #daa423;
+  color: #000; */
+}
+.stats .holder.confirmed,
 .stats .table .delta.confirmed {
-  color: #f00;
+  color: #5862e4;
 }
 .stats .holder.recovered {
-  background: #83e46c8f;
+  /* background: #83e46c8f; */
 }
-.stats .holder.recovered .delta::before,
+.stats .holder.recovered,
 .stats .table .delta.recovered {
   color: #83e46c;
 }
 .stats .holder.death {
-  background: #ffffff26;
+  /* background: #ffffff26; */
 }
-.stats .holder.death .delta::before,
+.stats .holder.death,
 .stats .table .delta.deaths {
   color: #ffffff;
 }
@@ -229,12 +292,14 @@
   top: 50px;
   position: relative;
   overflow: scroll;
-  height: calc(100% - 150px);
+  height: calc(100% - 245px);
 }
 .stats .table .row td,
 .stats .table .row th {
-  padding: 5px 10px;
+  padding: 5px 15px;
   position: relative;
+  vertical-align: bottom;
+  max-width: 120px;
 }
 
 .stats .table .row:nth-of-type(even) {
@@ -244,11 +309,11 @@
   color: #fff7e7;
   background: #5a504d;
 }
-.stats .table thead.row th{
-        position: sticky;
-    top: 0;
-    background: #5a504d;
-    z-index: 2;
+.stats .table thead.row th {
+  position: sticky;
+  top: 0;
+  background: #5a504d;
+  z-index: 2;
 }
 .stats .table .row.total {
   opacity: 1;
@@ -257,7 +322,7 @@
 }
 .stats .table .row .data,
 .stats .table .row .delta {
-  max-width: 100px;
+  width: 100%;
   overflow: hidden;
   display: block;
   text-align: end;
@@ -274,8 +339,6 @@
 }
 .stats .table .row .header {
   cursor: pointer;
-}.stats .table .row .header.confirmed{
-    min-width: 90px;
 }
 .stats .table .row .header.active::after {
   content: "⤒";
@@ -288,14 +351,28 @@
   content: "⤓";
   top: 5px;
 }
+.chart {
+  height: 75px;
+  width: 75px;
+  position: relative;
+  top: 0;
+  margin: 5px;
+}
+.map .message {
+  color: #979797;
+  position: absolute;
+  top: 20px;
+  left: 10px;
+}
 </style>
 <script>
 import { mapState, mapGetter, mapActions } from "vuex";
 import * as d3 from "d3";
 import * as topojson from "topojson";
 import router from "@/router/";
-import store from "@/store/";
+import state from "@/state/";
 import { httpRequest } from "@/utils/";
+import LineChart from "@/assets/LineChart";
 
 export default {
   name: "Map",
@@ -305,9 +382,13 @@ export default {
     propGeographyType: { default: "state" },
     mapPath: {}
   },
-  components: {},
+  components: {
+    LineChart
+  },
   data() {
     return {
+      loading: true,
+      state: state,
       svg: null,
       geography: "india",
       geographyType: "country",
@@ -317,9 +398,7 @@ export default {
         confirmed: 0,
         recovered: 0,
         deaths: 0,
-        deltaconfirmed: 0,
-        deltarecovered: 0,
-        deltadeaths: 0
+        delta: { active: 0, confirmed: 0, deltarecovered: 0, deltadeaths: 0 }
       },
       current: {
         target: null,
@@ -328,18 +407,23 @@ export default {
       sort: {
         key: "active",
         asc: false
-      }
+      },
+      maps: {},
+      mapMessage: "Click to view individual Stats"
     };
   },
   mounted() {
     if (this.inner) {
       this.mapStart();
     } else {
-      store.dispatch("getData");
+      state.getData(this.mapStart);
     }
   },
   watch: {
-    stats() {
+    mapPath() {
+      this.mapStart();
+    },
+    $route() {
       this.mapStart();
     }
   },
@@ -350,45 +434,51 @@ export default {
           this.geography = this.$route.params.city;
           this.geographyType = "city";
           this.hoverGeographyType = "district";
-          return store.state.cities[this.$route.params.city];
+          return state.india.objects[this.$route.params.state].objects[
+            this.$route.params.city
+          ];
         } else if (this.$route.params.state) {
           this.geography = this.$route.params.state + "_district";
           this.geographyType = "state";
           this.hoverGeographyType = "city";
-          return store.state.states[this.$route.params.state];
+          return state.india.objects[this.$route.params.state];
         } else {
           this.geography = "india";
           this.geographyType = "country";
           this.hoverGeographyType = "state";
-          return store.state.india;
+          return state.india;
         }
       } else {
         this.geography = this.propGeography;
         this.geographyType = this.propGeographyType;
         if (this.propGeographyType == "country") {
-          return store.state.india;
+          return state.india;
         } else if (this.propGeographyType == "state") {
           this.geography = this.propGeography + "_district";
-          return store.state.states[this.propGeography];
+          return state.india.objects[this.propGeography];
         } else {
-          return store.state.cities[this.propGeography];
+          return state.india.objects[this.$route.params.state].objects[
+            this.propGeography
+          ];
         }
       }
     },
     table() {
-      if (this.$route.params.city) {
-        return store.state.cities[this.$route.params.city].table.sort(
-          this.sortByProperty(this.sort.key, this.sort.asc)
-        );
-      } else if (this.$route.params.state) {
-        return store.state.states[this.$route.params.state].table.sort(
-          this.sortByProperty(this.sort.key, this.sort.asc)
-        );
-      } else {
-        return store.state.india.table.sort(
-          this.sortByProperty(this.sort.key, this.sort.asc)
-        );
+      var table = [];
+      var iter = JSON.parse(JSON.stringify(this.stats.objects));
+      for (var key in iter) {
+        var obj = this.stats.objects[key];
+        table.push({
+          name: obj.name,
+          active: obj.active,
+          confirmed: obj.confirmed,
+          recovered: obj.recovered,
+          deaths: obj.deaths,
+          delta: obj.delta,
+          daily: obj.daily
+        });
       }
+      return table.sort(this.sortByProperty(this.sort.key, this.sort.asc));
     }
   },
   methods: {
@@ -417,6 +507,7 @@ export default {
       };
     },
     mapStart() {
+      this.loading = true;
       this.current.target = null;
       if (this.svg) {
         d3.selectAll(
@@ -459,19 +550,29 @@ export default {
           .attr("width", this.width)
           .attr("height", this.height);
       }
-      d3.json(
-        process.env.BASE_URL + "maps" + this.getMapName() + ".json"
-      )
-        .then(this.plotMap)
-        .catch(err => {
-          //   console.log(err);
-          //   console.log(err + "-" + this.inner + "-" + this.getMapName());
-          console.log("NO MAP " + this.getMapName());
-        });
+      var mapUrl = process.env.BASE_URL + "maps" + this.getMapName() + ".json";
+      var func = this.storeLoadedMap;
+      if (this.maps[mapUrl]) {
+        this.plotMap(this.maps[mapUrl]);
+      } else {
+        d3.json(process.env.BASE_URL + "maps" + this.getMapName() + ".json")
+          .then(geo => {
+            func(geo, mapUrl);
+          })
+          .catch(err => {
+            console.log(err);
+            //   console.log(err + "-" + this.inner + "-" + this.getMapName());
+            console.log("NO MAP " + this.getMapName());
+          });
+      }
     },
-    plotMap(geo) {
-      var stats = this.stats;
+    storeLoadedMap(geo, mapUrl) {
       var topology = topojson.feature(geo, geo.objects[this.geography]);
+      this.maps[mapUrl] = topology;
+      this.plotMap(topology);
+    },
+    plotMap(topology) {
+      var stats = this.stats;
       var projection = d3.geoMercator();
       projection.fitExtent(
         [
@@ -502,6 +603,7 @@ export default {
           }
         })
         .attr("d", path);
+      this.loading = false;
     },
     getKey(d) {
       var key = null;
@@ -584,9 +686,8 @@ export default {
     },
     setData: function(key, d) {
       if (key) {
-        this.data = this.stats.objects[key];
-        if (this.data) {
-          this.data.region = this.data.name;
+        if (this.stats.objects && this.stats.objects[key]) {
+          this.data = JSON.parse(JSON.stringify(this.stats.objects[key]));
         } else {
           this.data = {
             region:
@@ -598,15 +699,24 @@ export default {
           };
         }
       } else {
-        if (this.stats && this.stats.objects && this.stats.objects.total) {
-          this.data = this.stats.objects.total;
-          this.data.region = this.data.name;
+        if (
+          this.stats &&
+          this.stats.active &&
+          this.data.name !== this.stats.name
+        ) {
+          var obj = {
+            active: this.stats.active,
+            name: this.stats.name,
+            confirmed: this.stats.confirmed,
+            recovered: this.stats.recovered,
+            deaths: this.stats.deaths,
+            delta: this.stats.delta,
+            daily: this.stats.daily
+          };
+          this.data = JSON.parse(JSON.stringify(obj));
         }
       }
     },
-    mapHover(e) {
-      console.log(e);
-    }
   }
 };
 </script>

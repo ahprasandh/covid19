@@ -9,7 +9,7 @@
   "dependencies": {
     "chart.js": "^2.9.3",
     "core-js": "^3.6.4",
-    "d3": "^5.15.1",
+    "d3": "^7.6.1",
     "topojson": "^3.0.2",
     "vue": "^2.6.11",
     "vue-chartjs": "^3.5.0",
